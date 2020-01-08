@@ -9,6 +9,7 @@ from pathlib import Path
 
 import requests
 from eliot import start_action, to_file, current_action
+import petname
 
 
 _g_session: requests.Session = None
@@ -54,11 +55,10 @@ def listen():
 		return content
 
 
-def main(command, netloc, logfile):
+def main(command, netloc, logfile, name):
 	to_file(open(logfile, 'ab'))
 	session = requests.Session()
 	
-	name = 'foo'
 	env = 'x=y'
 	
 	global _g_session
@@ -77,15 +77,22 @@ def main(command, netloc, logfile):
 		register()
 		while True:
 			content = listen()
+			from time import sleep
+			print('execute')
+			sleep(10)
 			
 
 def cli():
+	def random_name():
+		return petname.Generate(2, '_')
+
 	import argparse
 
 	parser = argparse.ArgumentParser()
 	parser.add_argument('command')
 	parser.add_argument('netloc')
 	parser.add_argument('--logfile', type=Path, default=Path.cwd() / 'log-client.txt')
+	parser.add_argument('--name', default=random_name())
 	args = vars(parser.parse_args())
 
 	main(**args)

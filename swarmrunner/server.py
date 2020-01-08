@@ -9,14 +9,17 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Tuple, Union
 from pathlib import Path
 from datetime import datetime, timedelta
-from threading import Event, Timer
+from threading import Event, Timer, Lock
+from contextlib import contextmanager
 import pkgutil
 from .util import continue_task_from_header
 
 from eliot import to_file, start_action, log_message, preserve_context
+from jinja2 import Template
 
 
 _g_clients: Dict[Client.name, Client] = None
+_g_lock: Lock = None
 
 
 @dataclass
@@ -28,14 +31,22 @@ class Client:
 	body: bytes
 
 
+@contextmanager
+def lock():
+	log_message('Acquire lock')
+	with _g_lock:
+		yield
+
+
 def remove_client(client):
 	with start_action(action_type='Remove client', name=client.name) as action:
 		name = client.name
-		
-		del _g_clients[name]
+
+		with lock():
+			del _g_clients[name]
 
 
-def start_timer(client, interval=60.0):
+def start_timer(client, interval=120.0):
 	with start_action(action_type='Start timer', name=client.name, interval=interval):
 		timer = Timer(interval, preserve_context(remove_client), args=(client,))
 		client.timer = timer
@@ -53,7 +64,10 @@ class RequestHandler(SimpleHTTPRequestHandler):
 
 	def do_GET(self):
 		if self.path == '/':
-			self.send('text/html', pkgutil.get_data('swarmrunner', 'static/index.html'))
+			source = pkgutil.get_data('swarmrunner', 'templates/index.html').decode('utf-8')
+			template = Template(source)
+			content = template.render(clients=_g_clients)
+			self.send('text/html', content.encode('utf-8'))
 		elif self.path == '/favicon.ico':
 			self.send('image/x-icon', pkgutil.get_data('swarmrunner', 'static/favicon.ico'))
 		elif self.path.startswith('/listen/'):
@@ -70,12 +84,13 @@ class RequestHandler(SimpleHTTPRequestHandler):
 		assert _listen == 'listen'
 
 		with start_action(action_type='GET /listen/:name', name=name) as context:
-			client = _g_clients[name]
+			with lock():
+				client = _g_clients[name]
 
 			cancel_timer(client)
 			start_timer(client)
 
-			timeout = 2 * 60  # seconds
+			timeout = 60  # seconds
 			context.log('Waiting for event', timeout=timeout)
 			event = client.event
 			was_set = event.wait(timeout=timeout)
@@ -119,7 +134,8 @@ class RequestHandler(SimpleHTTPRequestHandler):
 			body = None
 
 			client = Client(name, env, timer, event, body)
-			_g_clients[name] = client
+			with lock():
+				_g_clients[name] = client
 
 			start_timer(client)
 
@@ -136,7 +152,9 @@ class RequestHandler(SimpleHTTPRequestHandler):
 		with start_action(action_type='POST /send/:name', name=name) as context:
 			body = self.data
 
-			client = _g_clients[name]
+			with lock():
+				client = _g_clients[name]
+
 			event = client.event
 
 			client.body = body
@@ -184,8 +202,13 @@ def main(bind, port, logfile):
 	
 	clients = {}
 
+	lock = Lock()
+
 	global _g_clients
 	_g_clients = clients
+
+	global _g_lock
+	_g_lock = lock
 
 	address = (bind, port)
 	print(f'Listening on {address}')

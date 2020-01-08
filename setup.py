@@ -11,6 +11,7 @@ setup(
 	package_data={
 		'swarmrunner': [
 			'static/*',
+			'templates/*',
 		],
 	},
 	entry_points={
@@ -19,4 +20,9 @@ setup(
 			'swarmrunner-server=swarmrunner.server:cli',
 		],
 	},
+	requires=[
+		'requests',
+		'jinja2',
+		'petname',
+	],
 )
