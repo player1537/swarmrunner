@@ -20,7 +20,7 @@ setup(
 			'swarmrunner-server=swarmrunner.server:cli',
 		],
 	},
-	requires=[
+	install_requires=[
 		'requests',
 		'jinja2',
 		'petname',
