@@ -24,5 +24,6 @@ setup(
 		'requests',
 		'jinja2',
 		'petname',
+		'eliot[journald]',
 	],
 )

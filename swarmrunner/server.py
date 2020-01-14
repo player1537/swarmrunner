@@ -15,7 +15,14 @@ import pkgutil
 import json
 from .util import continue_task_from_header
 
-from eliot import to_file, start_action, log_message, preserve_context
+from eliot import (
+	to_file, start_action, log_message, preserve_context, add_destinations,
+)
+try:
+	from eliot.journald import JournaldDestination
+	has_journald = True
+except ImportError:
+	has_journald = False
 from jinja2 import Template
 
 
@@ -226,8 +233,16 @@ class RequestHandler(SimpleHTTPRequestHandler):
 		return True
 
 
-def main(bind, port, logfile):
+def main(bind, port, logfile, journald):
 	to_file(open(logfile, 'ab'))
+
+	if journald:
+		if has_journald:
+			dest = JournaldDestination()
+			dest._identifier = b'swarmrunner'
+			add_destinations(dest)
+		else:
+			log_message("Requested journald support, but it's not available")
 	
 	clients = {}
 
@@ -252,6 +267,7 @@ def cli(args=None):
 	parser.add_argument('--bind', default='')
 	parser.add_argument('--port', type=int, default=8800)
 	parser.add_argument('--logfile', type=Path, default=Path.cwd() / 'log-server.txt')
+	parser.add_argument('--journald', action='store_true')
 	args = vars(parser.parse_args(args))
 
 	main(**args)

@@ -12,7 +12,12 @@ from tempfile import TemporaryDirectory, NamedTemporaryFile
 import subprocess
 
 import requests
-from eliot import start_action, to_file, current_action
+from eliot import start_action, to_file, current_action, add_destinations
+try:
+	from eliot.journald import JournaldDestination
+	has_journald = True
+except ImportError:
+	has_journald = False
 import petname
 
 
@@ -80,9 +85,17 @@ def execute(content):
 				subprocess.run(**kwargs)
 
 
-def main(command, netloc, logfile, name):
+def main(command, netloc, logfile, name, journald):
 	to_file(open(logfile, 'ab'))
 	session = requests.Session()
+
+	if journald:
+		if has_journald:
+			dest = JournaldDestination()
+			dest._identifier = b'swarmrunner'
+			add_destinations(dest)
+		else:
+			log_message("Requested journald logging, but it's not available")
 	
 	env = json.dumps(dict(os.environ))
 	
@@ -117,6 +130,7 @@ def cli():
 	parser.add_argument('command')
 	parser.add_argument('netloc')
 	parser.add_argument('--logfile', type=Path, default=Path.cwd() / 'log-client.txt')
+	parser.add_argument('--journald', action='store_true')
 	parser.add_argument('--name', default=random_name())
 	args = vars(parser.parse_args())
 
