@@ -8,5 +8,5 @@ swarmrunner/__init__.py
 swarmrunner/__main__.py
 swarmrunner/client.py
 swarmrunner/server.py
-swarmrunner/templates/index.html
+swarmrunner/static/index.html
 swarmrunner/util.py

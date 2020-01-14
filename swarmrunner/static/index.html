@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<title>swarmrunner</title>
+<!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/kognise/water.css@latest/dist/light.min.css"> -->
+<style>
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+#root {
+	height: 100vh;
+}
+.split, .gutter.gutter-horizontal {
+    float: left;
+}
+.gutter.gutter-horizontal {
+    cursor: ew-resize;
+    height: 100%;
+    background-color: #ccc;
+}
+</style>
+<div id="root">
+<div class="split" id="one"></div>
+<div class="split" id="two"><p>another one</p></div>
+</div>
+<script src="https://unpkg.com/split.js@1.5.11/dist/split.js"></script>
+<script src="/static/main.js"></script>
+<script>
+(async () => {
+
+const clients = await (await fetch('/clients/')).json();
+
+Split(['#one', '#two'], {
+	sizes: [20, 80],
+});
+
+const $one = document.querySelector('#one');
+const $two = document.querySelector('#two');
+
+const $input = document.createElement('input');
+$input.type = 'text';
+$input.addEventListener('input', () => {
+	render();
+});
+
+function render() {
+	
+}
+
+})();
+</script>

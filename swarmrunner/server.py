@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from threading import Event, Timer, Lock
 from contextlib import contextmanager
 import pkgutil
+import json
 from .util import continue_task_from_header
 
 from eliot import to_file, start_action, log_message, preserve_context
@@ -64,17 +65,45 @@ class RequestHandler(SimpleHTTPRequestHandler):
 
 	def do_GET(self):
 		if self.path == '/':
-			source = pkgutil.get_data('swarmrunner', 'templates/index.html').decode('utf-8')
-			template = Template(source)
-			content = template.render(clients=_g_clients)
-			self.send('text/html', content.encode('utf-8'))
+			content = pkgutil.get_data('swarmrunner', 'static/index.html')
+			self.send('text/html', content)
+		elif self.path == '/static/main.js':
+			content = pkgutil.get_data('swarmrunner', 'static/main.js')
+			self.send('application/javascript', content)
 		elif self.path == '/favicon.ico':
-			self.send('image/x-icon', pkgutil.get_data('swarmrunner', 'static/favicon.ico'))
+			content = pkgutil.get_data('swarmrunner', 'static/favicon.ico')
+			self.send('image/x-icon', content)
 		elif self.path.startswith('/listen/'):
 			self.do_GET_listen()
+		elif self.path == '/clients/':
+			self.do_GET_clients()
 		else:
 			print('GET', self.path)
 			raise NotImplementedError
+
+	def do_GET_clients(self):
+		"GET /clients/"
+		_, _clients, _2 = self.path.split('/')
+		assert _ == ''
+		assert _clients == 'clients'
+		assert _2 == ''
+		
+		clients = _g_clients
+		
+		with start_action(action_type='GET /clients/') as context:
+			with lock():
+				data = {
+					'clients': [
+						{
+							'name': c.name,
+							'env': json.loads(c.env),
+						}
+						for c in clients.values()
+					],
+				}
+			
+			content = json.dumps(data).encode('utf-8')
+			self.send('application/json', content)
 	
 	@continue_task_from_header(action_type='Server')
 	def do_GET_listen(self):
@@ -128,7 +157,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
 		assert name != ''
 
 		with start_action(action_type='POST /register/:name', name=name) as context:
-			env = self.data
+			env = self.data.decode('utf-8')
 			timer = None
 			event = Event()
 			body = None

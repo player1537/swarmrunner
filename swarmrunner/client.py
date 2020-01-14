@@ -6,6 +6,8 @@
 from __future__ import annotations
 from typing import List, Dict, Tuple, Union
 from pathlib import Path
+import os
+import json
 
 import requests
 from eliot import start_action, to_file, current_action
@@ -59,7 +61,7 @@ def main(command, netloc, logfile, name):
 	to_file(open(logfile, 'ab'))
 	session = requests.Session()
 	
-	env = 'x=y'
+	env = json.dumps(dict(os.environ))
 	
 	global _g_session
 	_g_session = session
