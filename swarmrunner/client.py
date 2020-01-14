@@ -59,6 +59,8 @@ def listen():
 
 	with start_action(action_type='Listen', name=name) as context:
 		with eliot_request('GET', f'http://{netloc}/listen/{name}') as r:
+			if r.status_code == 408:
+				return None
 			content = r.content
 		
 		return content
@@ -117,6 +119,10 @@ def main(command, netloc, logfile, name, journald):
 		while True:
 			content = listen()
 			print(content)
+			if content is None:
+				context.log('Got timeout')
+				continue
+
 			execute(content)
 			
 
