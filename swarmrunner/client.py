@@ -27,6 +27,14 @@ _g_name: str = None
 _g_env: str = None
 
 
+class BadName(Exception):
+	pass
+
+
+def random_name():
+	return petname.Generate(2, '_')
+
+
 def eliot_request(*args, session=None, **kwargs):
 	with start_action(action_type='eliot_request') as context:
 		if session is None:
@@ -49,6 +57,9 @@ def register():
 
 	with start_action(action_type='Register', name=name) as context:
 		with eliot_request('POST', f'http://{netloc}/register/{name}', data=data) as r:
+			if r.status_code == 409:
+				raise BadName(f'The name {name!r} is already taken')
+
 			content = r.content
 			assert content == b'ok\r\n'
 
@@ -91,6 +102,9 @@ def main(command, netloc, logfile, name, journald):
 	to_file(open(logfile, 'ab'))
 	session = requests.Session()
 
+	if name is None:
+		name = random_name()
+
 	if journald:
 		if has_journald:
 			dest = JournaldDestination()
@@ -115,7 +129,18 @@ def main(command, netloc, logfile, name, journald):
 
 	print(name)
 	with start_action(action_type='Client') as context:
-		register()
+		for _ in range(100):
+			try:
+				register()
+			except BadName:
+				name = random_name()
+				_g_name = name
+			else:
+				break
+		else:
+			context.log('Could not get a good name')
+			return
+
 		while True:
 			content = listen()
 			print(content)
@@ -127,9 +152,6 @@ def main(command, netloc, logfile, name, journald):
 			
 
 def cli():
-	def random_name():
-		return petname.Generate(2, '_')
-
 	import argparse
 
 	parser = argparse.ArgumentParser()
@@ -137,7 +159,7 @@ def cli():
 	parser.add_argument('netloc')
 	parser.add_argument('--logfile', type=Path, default=Path.cwd() / 'log-client.txt')
 	parser.add_argument('--journald', action='store_true')
-	parser.add_argument('--name', default=random_name())
+	parser.add_argument('--name', default=None)
 	args = vars(parser.parse_args())
 
 	main(**args)

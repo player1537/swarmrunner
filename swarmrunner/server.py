@@ -169,8 +169,13 @@ class RequestHandler(SimpleHTTPRequestHandler):
 			event = Event()
 			body = None
 
-			client = Client(name, env, timer, event, body)
 			with lock():
+				if name in _g_clients:
+					context.log('client already exists with name', name=name)
+					self.send('text/plain', b'client already exists with name', response=409)
+					return
+
+				client = Client(name, env, timer, event, body)
 				_g_clients[name] = client
 
 			start_timer(client)
