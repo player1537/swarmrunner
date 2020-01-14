@@ -8,6 +8,8 @@ from typing import List, Dict, Tuple, Union
 from pathlib import Path
 import os
 import json
+from tempfile import TemporaryDirectory, NamedTemporaryFile
+import subprocess
 
 import requests
 from eliot import start_action, to_file, current_action
@@ -57,6 +59,27 @@ def listen():
 		return content
 
 
+def execute(content):
+	with start_action(action_type='Execute') as context:
+		tmpdir = TemporaryDirectory()
+		with tmpdir:
+			context.log('created temporary directory', tmpdir=tmpdir.name)
+			
+			tmpfile = NamedTemporaryFile(dir=tmpdir.name, delete=False)
+			with tmpfile:
+				context.log('created temporary file', tmpfile=tmpfile.name)
+				
+				tmpfile.write(content)
+				tmpfile.close()
+				kwargs = {
+					'args': ['/bin/bash', tmpfile.name],
+					'cwd': tmpdir.name,
+					'check': True,
+				}
+				context.log('subprocess.run', **kwargs)
+				subprocess.run(**kwargs)
+
+
 def main(command, netloc, logfile, name):
 	to_file(open(logfile, 'ab'))
 	session = requests.Session()
@@ -75,13 +98,13 @@ def main(command, netloc, logfile, name):
 	global _g_env
 	_g_env = env
 
+	print(name)
 	with start_action(action_type='Client') as context:
 		register()
 		while True:
 			content = listen()
-			from time import sleep
-			print('execute')
-			sleep(10)
+			print(content)
+			execute(content)
 			
 
 def cli():
