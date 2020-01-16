@@ -158,6 +158,8 @@ class RequestHandler(SimpleHTTPRequestHandler):
 			self.do_POST_count()
 		elif self.path.startswith('/create/'):
 			self.do_POST_create()
+		elif self.path == '/killall/':
+			self.do_POST_killall()
 		else:
 			print('POST', self.path)
 			raise NotImplementedError
@@ -250,6 +252,35 @@ class RequestHandler(SimpleHTTPRequestHandler):
 					'--subnet-id', 'subnet-250d584d',
 					'--security-group-ids', 'sg-0a0349d5d30aff8a7',
 					'--user-data', user_data,
+				]
+				kwargs = {
+					'args': args,
+					'cwd': '/tmp',
+					'capture_output': True,
+					'check': True,
+				}
+
+				with start_action(action_type='subprocess.run', **kwargs) as action:
+					process = subprocess.run(**kwargs)
+					action.add_success_fields(stdout=process.stdout, stderr=process.stderr)
+
+			self.send('text/plain', b'ok\r\n')
+
+	@continue_task_from_header(action_type='Server')
+	def do_POST_killall(self):
+		"POST /killall/"
+		_, _killall, _2 = self.path.split('/')
+		assert _ == ''
+		assert _killall == 'killall'
+		assert _2 == ''
+
+		with start_action(action_type='POST /killall/') as context:
+			with lock():
+				script = pkgutil.get_data('swarmrunner', 'scripts/aws-kill-all-instances.sh')
+				args = [
+					'bash', '-c',
+					script,
+					'aws-kill-all-instance.sh',
 				]
 				kwargs = {
 					'args': args,
