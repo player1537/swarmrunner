@@ -11,6 +11,8 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from threading import Event, Timer, Lock
 from contextlib import contextmanager
+from collections import defaultdict
+import subprocess
 import pkgutil
 import json
 from .util import continue_task_from_header
@@ -28,6 +30,7 @@ from jinja2 import Template
 
 _g_clients: Dict[Client.name, Client] = None
 _g_lock: Lock = None
+_g_counts: Dict[str, int] = None
 
 
 @dataclass
@@ -151,6 +154,10 @@ class RequestHandler(SimpleHTTPRequestHandler):
 			self.do_POST_register()
 		elif self.path.startswith('/send/'):
 			self.do_POST_send()
+		elif self.path.startswith('/count/'):
+			self.do_POST_count()
+		elif self.path.startswith('/create/'):
+			self.do_POST_create()
 		else:
 			print('POST', self.path)
 			raise NotImplementedError
@@ -203,6 +210,60 @@ class RequestHandler(SimpleHTTPRequestHandler):
 
 			self.send('text/plain', b'ok\r\n')
 	
+	@continue_task_from_header(action_type='Server')
+	def do_POST_count(self):
+		"POST /count/:id"
+		_, _count, id = self.path.split('/')
+		assert _ == ''
+		assert _count == 'count'
+		assert id != ''
+
+		counts = _g_counts
+
+		with start_action(action_type='POST /count/:id', id=id) as context:
+			with lock():
+				count = counts[id]
+				counts[id] = count + 1
+
+			self.send('text/plain', b'%d' % (count,))
+
+	@continue_task_from_header(action_type='Server')
+	def do_POST_create(self):
+		"POST /count/:type"
+		_, _create, type = self.path.split('/')
+		assert _ == ''
+		assert _create == 'create'
+		assert type != ''
+
+		count = int(self.data)
+		assert 0 < count < 16
+
+		with start_action(action_type='POST /create/:type', type=type) as context:
+			with lock():
+				user_data = pkgutil.get_data('swarmrunner', 'scripts/aws-user-data.sh')
+				args = [
+					'aws', 'ec2', 'run-instances',
+					'--image-id', 'ami-09aeadf521cc24feb',
+					'--count', f'{count}',
+					'--instance-type', f'{type}',
+					'--key-name', 'Accona',
+					'--subnet-id', 'subnet-250d584d',
+					'--security-group-ids', 'sg-0a0349d5d30aff8a7',
+					'--user-data', user_data,
+				]
+				kwargs = {
+					'args': args,
+					'cwd': '/tmp',
+					'capture_output': True,
+					'check': True,
+				}
+
+				with start_action(action_type='subprocess.run', **kwargs) as action:
+					process = subprocess.run(**kwargs)
+					action.add_success_fields(stdout=process.stdout, stderr=process.stderr)
+
+			self.send('text/plain', b'ok\r\n')
+
 	def send(self, content_type, content, *, response=200):
 		use_keep_alive = self._should_use_keep_alive()
 		use_gzip = self._should_use_gzip()
@@ -241,6 +302,8 @@ class RequestHandler(SimpleHTTPRequestHandler):
 def main(bind, port, logfile, journald):
 	to_file(open(logfile, 'ab'))
 
+	print((datetime.utcnow() - timedelta(seconds=5)).isoformat())
+
 	if journald:
 		if has_journald:
 			dest = JournaldDestination()
@@ -253,11 +316,16 @@ def main(bind, port, logfile, journald):
 
 	lock = Lock()
 
+	counts = defaultdict(int)
+
 	global _g_clients
 	_g_clients = clients
 
 	global _g_lock
 	_g_lock = lock
+
+	global _g_counts
+	_g_counts = counts
 
 	address = (bind, port)
 	print(f'Listening on {address}')

@@ -12,6 +12,7 @@ setup(
 		'swarmrunner': [
 			'static/*',
 			'templates/*',
+			'scripts/*',
 		],
 	},
 	entry_points={
